@@ -1,0 +1,15 @@
+[Unit]
+Description=Restricted Site (Axum)
+After=network.target postgresql.service
+
+[Service]
+Type=simple
+User=www-data
+WorkingDirectory=/opt/restricted-site
+EnvironmentFile=/opt/restricted-site/.env
+ExecStart=/opt/restricted-site/restricted-site
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

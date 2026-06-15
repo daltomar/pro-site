@@ -1,0 +1,29 @@
+[package]
+name = "pro-site"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "restricted-site"
+path = "src/main.rs"
+
+[dependencies]
+axum = { version = "0.7", features = ["macros"] }
+axum-extra = { version = "0.9", features = ["cookie"] }
+tokio = { version = "1", features = ["full"] }
+sqlx = { version = "0.8", features = ["postgres", "uuid", "chrono", "runtime-tokio-rustls"] }
+argon2 = "0.5"
+rand = "0.8"
+governor = { version = "0.6", features = ["dashmap"] }
+constant_time_eq = "0.3"
+sha2 = "0.10"
+hex = "0.4"
+dotenvy = "0.15"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+uuid = { version = "1", features = ["v4", "serde"] }
+tower = { version = "0.4", features = ["util"] }
+tower-http = { version = "0.5", features = ["fs", "trace"] }
+chrono = { version = "0.4", features = ["serde"] }
