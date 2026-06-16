@@ -156,6 +156,7 @@ p.error {
 }
 
 .logout-form button:hover {
+  background: transparent;
   border-color: var(--text);
   color: var(--text);
 }
