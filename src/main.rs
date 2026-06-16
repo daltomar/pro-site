@@ -7,7 +7,7 @@ use axum::{
 };
 use governor::{Quota, RateLimiter};
 use std::{collections::HashMap, net::IpAddr, num::NonZeroU32, sync::Arc};
-use tower_http::trace::TraceLayer;
+use tower_http::{services::ServeDir, trace::TraceLayer};
 
 mod admin;
 mod auth;
@@ -55,6 +55,7 @@ async fn main() {
     };
 
     let app = Router::new()
+        .nest_service("/css", ServeDir::new("static/css"))
         .route("/", get(serve_index))
         .route("/login", get(serve_login).post(auth::handlers::login))
         .route("/logout", post(auth::handlers::logout))
