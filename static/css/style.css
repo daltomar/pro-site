@@ -28,8 +28,8 @@ h2 { font-size: 1.25rem; }
 
 p { margin: 0 0 1rem; }
 
-a { color: #2563eb; }
-a:hover { color: #1d4ed8; }
+a { color: #16a34a; }
+a:hover { color: #15803d; }
 
 hr {
   border: none;
@@ -86,7 +86,7 @@ hr {
 }
 
 .field input:focus {
-  border-color: #2563eb;
+  border-color: #16a34a;
   background: #fff;
 }
 
