@@ -10,17 +10,52 @@
   <main>
     <!-- BANNER -->
     <h1>Restricted Area</h1>
-    <hr>
-    <p>
+    <p class="restricted-intro">
       You are in the restricted area. This section is available exclusively to
       authorized users. The content here is private and must not be shared.
     </p>
-    <p>
-      <!-- Content will be added here. -->
-    </p>
+    <hr>
+
+    <div class="tabs" role="tablist">
+      <button class="tab active" data-tab="1">Tab 1</button>
+      <button class="tab" data-tab="2">Tab 2</button>
+      <button class="tab" data-tab="3">Tab 3</button>
+      <button class="tab" data-tab="4">Tab 4</button>
+    </div>
+
+    <div class="tab-panels">
+      <div class="tab-panel active" data-panel="1">
+        <!-- Content will be added here. -->
+        <p>Placeholder content for tab 1.</p>
+      </div>
+      <div class="tab-panel" data-panel="2">
+        <!-- Placeholder content for tab 2 -->
+        <p>Placeholder content for tab 2.</p>
+      </div>
+      <div class="tab-panel" data-panel="3">
+        <!-- Placeholder content for tab 3 -->
+        <p>Placeholder content for tab 3.</p>
+      </div>
+      <div class="tab-panel" data-panel="4">
+        <!-- Placeholder content for tab 4 -->
+        <p>Placeholder content for tab 4.</p>
+      </div>
+    </div>
+
     <form class="logout-form" method="post" action="/logout">
       <button type="submit">Sign out</button>
     </form>
   </main>
+
+  <script>
+    document.querySelectorAll('.tab').forEach(tab => {
+      tab.addEventListener('click', () => {
+        document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+        document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+        tab.classList.add('active');
+        document.querySelector(`.tab-panel[data-panel="${tab.dataset.tab}"]`).classList.add('active');
+      });
+    });
+  </script>
 </body>
 </html>

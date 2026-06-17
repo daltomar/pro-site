@@ -161,6 +161,55 @@ p.error {
   color: var(--text);
 }
 
+/* ── Restricted intro ───────────────────────────────────── */
+
+.restricted-intro {
+  font-size: 0.875rem;
+}
+
+/* ── Tabs ───────────────────────────────────────────────── */
+
+.tabs {
+  display: flex;
+  border-bottom: 1px solid var(--border-mid);
+  margin-bottom: 1rem;
+}
+
+.tab {
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: var(--text-dim);
+  font-family: inherit;
+  font-size: 0.875rem;
+  font-weight: bold;
+  padding: 0.5rem 1rem;
+  cursor: pointer;
+  margin-bottom: -1px;
+  transition: color 0.1s, border-color 0.1s;
+}
+
+.tab:hover {
+  color: var(--text);
+}
+
+.tab.active {
+  color: var(--text-bright);
+  border-bottom-color: var(--text);
+}
+
+.tab-panels {
+  margin-bottom: 1.5rem;
+}
+
+.tab-panel {
+  display: none;
+}
+
+.tab-panel.active {
+  display: block;
+}
+
 /* ── Access banner ───────────────────────────────────────── */
 
 .access-banner {
