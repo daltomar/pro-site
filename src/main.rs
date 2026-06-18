@@ -2,7 +2,7 @@ use axum::{
     extract::Query,
     http::StatusCode,
     response::{Html, IntoResponse},
-    routing::{get, post},
+    routing::{get, post, put},
     Router,
 };
 use governor::{Quota, RateLimiter};
@@ -60,11 +60,13 @@ async fn main() {
         .route("/login", get(serve_login).post(auth::handlers::login))
         .route("/logout", post(auth::handlers::logout))
         .route("/restricted/", get(restricted::handlers::index))
+        .route("/restricted/images/:filename", get(restricted::handlers::serve_image))
         .route("/restricted/*path", get(restricted::handlers::asset))
         .route("/admin/issue", post(admin::handlers::issue))
         .route("/admin/users", get(admin::handlers::list_users))
         .route("/admin/revoke", post(admin::handlers::revoke))
         .route("/admin/reset", post(admin::handlers::reset))
+        .route("/admin/content/:tab_number", put(admin::handlers::put_tab_content))
         .layer(TraceLayer::new_for_http())
         .with_state(state);
 

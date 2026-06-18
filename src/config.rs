@@ -5,6 +5,7 @@ pub struct Config {
     pub admin_secret: String,
     pub session_duration_secs: i64,
     pub server_addr: String,
+    pub restricted_images_dir: String,
 }
 
 impl Config {
@@ -18,6 +19,8 @@ impl Config {
                 .expect("SESSION_DURATION_SECS must be a number"),
             server_addr: env::var("SERVER_ADDR")
                 .unwrap_or_else(|_| "127.0.0.1:3000".to_string()),
+            restricted_images_dir: env::var("RESTRICTED_IMAGES_DIR")
+                .expect("RESTRICTED_IMAGES_DIR must be set"),
         }
     }
 }

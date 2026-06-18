@@ -1,5 +1,5 @@
 use axum::{
-    extract::State,
+    extract::{Path, State},
     http::{HeaderMap, StatusCode},
     response::{IntoResponse, Json, Response},
 };
@@ -173,6 +173,120 @@ pub async fn reset(
         Ok(_) => Json(serde_json::json!({ "ok": true })).into_response(),
         Err(e) => {
             tracing::error!("Failed to reset user {}: {}", body.username, e);
+            (StatusCode::INTERNAL_SERVER_ERROR, "Internal server error").into_response()
+        }
+    }
+}
+
+fn is_valid_image_filename(name: &str) -> bool {
+    if name.is_empty() {
+        return false;
+    }
+    let dot = match name.rfind('.') {
+        Some(i) => i,
+        None => return false,
+    };
+    let stem = &name[..dot];
+    let ext = &name[dot + 1..];
+    if stem.is_empty() {
+        return false;
+    }
+    let valid_ext = matches!(ext, "jpg" | "jpeg" | "png" | "webp" | "gif");
+    let valid_stem = stem.chars().all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-');
+    valid_ext && valid_stem
+}
+
+#[derive(Deserialize)]
+pub struct TabContentBody {
+    pub body_text: Option<String>,
+    pub image_filename: Option<String>,
+}
+
+#[derive(Serialize)]
+struct TabContentRow {
+    tab_number: i16,
+    body_text: Option<String>,
+    image_filename: Option<String>,
+    updated_at: String,
+}
+
+pub async fn put_tab_content(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(tab_number): Path<i16>,
+    Json(body): Json<TabContentBody>,
+) -> Response {
+    if !check_admin_auth(&headers, &state.config) {
+        return forbidden();
+    }
+
+    if !(1..=4).contains(&tab_number) {
+        return (StatusCode::BAD_REQUEST, "tab_number must be between 1 and 4").into_response();
+    }
+
+    let body_text = body.body_text.map(|s| {
+        let trimmed = s.trim().to_string();
+        if trimmed.is_empty() { None } else { Some(trimmed) }
+    }).flatten();
+
+    if let Some(ref text) = body_text {
+        if text.len() > 2000 {
+            return (StatusCode::BAD_REQUEST, "body_text exceeds 2000 characters").into_response();
+        }
+    }
+
+    let image_filename = match body.image_filename {
+        Some(ref name) if !name.is_empty() => {
+            if !is_valid_image_filename(name) {
+                return (
+                    StatusCode::BAD_REQUEST,
+                    "image_filename must match ^[A-Za-z0-9_-]+\\.(jpg|jpeg|png|webp|gif)$",
+                )
+                    .into_response();
+            }
+            let path = format!("{}/{}", state.config.restricted_images_dir, name);
+            match tokio::fs::metadata(&path).await {
+                Ok(_) => Some(name.clone()),
+                Err(_) => {
+                    return (
+                        StatusCode::BAD_REQUEST,
+                        "image_filename does not exist in the images directory",
+                    )
+                        .into_response();
+                }
+            }
+        }
+        _ => None,
+    };
+
+    let result = sqlx::query(
+        "INSERT INTO tab_content (tab_number, body_text, image_filename, updated_at)
+         VALUES ($1, $2, $3, now())
+         ON CONFLICT (tab_number) DO UPDATE
+         SET body_text = EXCLUDED.body_text,
+             image_filename = EXCLUDED.image_filename,
+             updated_at = now()
+         RETURNING tab_number, body_text, image_filename, updated_at",
+    )
+    .bind(tab_number)
+    .bind(&body_text)
+    .bind(&image_filename)
+    .fetch_one(&state.pool)
+    .await;
+
+    match result {
+        Ok(row) => {
+            let updated_at: chrono::DateTime<chrono::Utc> = row.get("updated_at");
+            Json(TabContentRow {
+                tab_number: row.get("tab_number"),
+                body_text: row.get("body_text"),
+                image_filename: row.get("image_filename"),
+                updated_at: updated_at.to_rfc3339(),
+            })
+            .into_response()
+        }
+        Err(e) => {
+            tracing::error!("Failed to upsert tab_content for tab {}: {}", tab_number, e);
             (StatusCode::INTERNAL_SERVER_ERROR, "Internal server error").into_response()
         }
     }
