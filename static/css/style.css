@@ -25,6 +25,15 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
+body.login-page {
+  padding: 0;
+}
+
+img {
+  max-width: 100%;
+  height: auto;
+}
+
 main {
   max-width: 680px;
   margin: 0 auto;
@@ -62,6 +71,7 @@ hr {
 
 .login-wrap {
   min-height: 100vh;
+  min-height: 100dvh;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -171,6 +181,7 @@ p.error {
 
 .tabs {
   display: flex;
+  flex-wrap: wrap;
   border-bottom: 1px solid var(--border-mid);
   margin-bottom: 1rem;
 }
