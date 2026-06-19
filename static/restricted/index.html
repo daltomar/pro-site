@@ -52,6 +52,20 @@
         document.querySelector(`.tab-panel[data-panel="${tab.dataset.tab}"]`).classList.add('active');
       });
     });
+
+    (function () {
+      const INACTIVITY_TIMEOUT_MS = 10 * 60 * 1000;
+      let timer = setTimeout(() => { window.location.href = '/login'; }, INACTIVITY_TIMEOUT_MS);
+
+      function resetTimer() {
+        clearTimeout(timer);
+        timer = setTimeout(() => { window.location.href = '/login'; }, INACTIVITY_TIMEOUT_MS);
+      }
+
+      ['mousemove', 'keydown', 'mousedown', 'touchstart', 'scroll'].forEach(function (evt) {
+        document.addEventListener(evt, resetTimer, { passive: true });
+      });
+    })();
   </script>
 </body>
 </html>
