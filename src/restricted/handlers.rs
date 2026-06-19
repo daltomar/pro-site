@@ -3,6 +3,7 @@ use axum::{
     http::StatusCode,
     response::{Html, IntoResponse, Response},
 };
+use comrak::{markdown_to_html, Options};
 use sqlx::Row;
 
 use crate::{auth::middleware::AuthUser, AppState};
@@ -102,7 +103,7 @@ fn render_tab_content(entry: Option<&(Option<String>, Option<String>)>) -> Strin
             let mut out = String::new();
             if let Some(text) = body {
                 if !text.is_empty() {
-                    out.push_str(&format!("<p>{}</p>", html_escape(text)));
+                    out.push_str(&markdown_to_html(text, &Options::default()));
                 }
             }
             if let Some(filename) = img {
@@ -118,7 +119,7 @@ fn render_tab_content(entry: Option<&(Option<String>, Option<String>)>) -> Strin
     }
 }
 
-fn html_escape(s: &str) -> String {
+pub fn html_escape(s: &str) -> String {
     s.chars()
         .flat_map(|c| match c {
             '&' => "&amp;".chars().collect::<Vec<_>>(),

@@ -1,7 +1,8 @@
 use axum::{
-    extract::{Path, State},
+    extract::{Path, Query, State},
     http::{HeaderMap, StatusCode},
-    response::{IntoResponse, Json, Response},
+    response::{Html, IntoResponse, Json, Redirect, Response},
+    Form,
 };
 use constant_time_eq::constant_time_eq;
 use serde::{Deserialize, Serialize};
@@ -230,8 +231,8 @@ pub async fn put_tab_content(
     }).flatten();
 
     if let Some(ref text) = body_text {
-        if text.len() > 2000 {
-            return (StatusCode::BAD_REQUEST, "body_text exceeds 2000 characters").into_response();
+        if text.len() > 10_000 {
+            return (StatusCode::BAD_REQUEST, "body_text exceeds 10000 characters").into_response();
         }
     }
 
@@ -290,4 +291,217 @@ pub async fn put_tab_content(
             (StatusCode::INTERNAL_SERVER_ERROR, "Internal server error").into_response()
         }
     }
+}
+
+// ── Admin content web form ────────────────────────────────────────────────────
+
+#[derive(Deserialize)]
+pub struct SavedQuery {
+    pub saved: Option<u8>,
+}
+
+pub async fn content_form(
+    State(state): State<AppState>,
+    Query(params): Query<SavedQuery>,
+) -> Response {
+    let rows = sqlx::query(
+        "SELECT tab_number, body_text, image_filename FROM tab_content WHERE tab_number BETWEEN 1 AND 4",
+    )
+    .fetch_all(&state.pool)
+    .await
+    .unwrap_or_default();
+
+    let mut tabs: [(String, String); 4] = Default::default();
+    for row in &rows {
+        let n: i16 = row.get("tab_number");
+        if (1..=4).contains(&n) {
+            let body: String = row.get::<Option<String>, _>("body_text").unwrap_or_default();
+            let img: String = row.get::<Option<String>, _>("image_filename").unwrap_or_default();
+            tabs[(n - 1) as usize] = (body, img);
+        }
+    }
+
+    let saved_banner = if params.saved == Some(1) {
+        r#"<p class="banner ok">Content saved.</p>"#
+    } else {
+        ""
+    };
+
+    let mut tab_sections = String::new();
+    for i in 0..4usize {
+        let n = i + 1;
+        let (ref body, ref img) = tabs[i];
+        tab_sections.push_str(&format!(
+            r#"
+      <section>
+        <h2>Tab {n}</h2>
+        <label for="body_{n}">Body (Markdown)</label>
+        <textarea id="body_{n}" name="body_text_{n}" rows="12">{body_escaped}</textarea>
+        <label for="img_{n}">Image filename</label>
+        <input id="img_{n}" name="image_filename_{n}" type="text" value="{img_escaped}">
+      </section>"#,
+            n = n,
+            body_escaped = crate::restricted::handlers::html_escape(body),
+            img_escaped = crate::restricted::handlers::html_escape(img),
+        ));
+    }
+
+    let html = format!(
+        r#"<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Admin — Edit Tab Content</title>
+  <style>
+    *, *::before, *::after {{ box-sizing: border-box; }}
+    body {{ background: #0d0d0d; color: #c8ffc8; font-family: monospace; font-size: 0.95rem; margin: 0; padding: 2rem; }}
+    h1 {{ color: #80ff80; margin-bottom: 1.5rem; }}
+    h2 {{ color: #80ff80; font-size: 1rem; border-bottom: 1px solid #2a2a2a; padding-bottom: 0.25rem; margin-top: 2rem; }}
+    label {{ display: block; margin-bottom: 0.25rem; color: #7aad7a; font-size: 0.85rem; }}
+    textarea, input[type="text"], input[type="password"] {{ width: 100%; background: #1a1a1a; color: #c8ffc8; border: 1px solid #2e4d2e; border-radius: 3px; padding: 0.5rem; font-family: monospace; font-size: 0.9rem; margin-bottom: 0.75rem; }}
+    textarea {{ resize: vertical; }}
+    button {{ background: #1a3a1a; color: #80ff80; border: 1px solid #2e4d2e; padding: 0.6rem 1.4rem; font-family: monospace; font-size: 0.95rem; cursor: pointer; border-radius: 3px; margin-top: 1rem; }}
+    button:hover {{ background: #2a4a2a; }}
+    section {{ max-width: 780px; }}
+    .banner {{ padding: 0.6rem 1rem; border-radius: 3px; margin-bottom: 1rem; max-width: 780px; }}
+    .banner.ok {{ background: #1a3a1a; border: 1px solid #2e6e2e; color: #80ff80; }}
+    .banner.err {{ background: #3a1a1a; border: 1px solid #6e2e2e; color: #ff8080; }}
+  </style>
+</head>
+<body>
+  <h1>Edit Tab Content</h1>
+  {saved_banner}
+  <form method="post" action="/admin/content">
+    <label for="secret">Admin secret</label>
+    <input id="secret" name="admin_secret" type="password" autocomplete="current-password">
+    {tab_sections}
+    <button type="submit">Save all tabs</button>
+  </form>
+</body>
+</html>"#,
+        saved_banner = saved_banner,
+        tab_sections = tab_sections,
+    );
+
+    Html(html).into_response()
+}
+
+#[derive(Deserialize)]
+pub struct ContentFormBody {
+    pub admin_secret: String,
+    pub body_text_1: Option<String>,
+    pub body_text_2: Option<String>,
+    pub body_text_3: Option<String>,
+    pub body_text_4: Option<String>,
+    pub image_filename_1: Option<String>,
+    pub image_filename_2: Option<String>,
+    pub image_filename_3: Option<String>,
+    pub image_filename_4: Option<String>,
+}
+
+pub async fn save_content_form(
+    State(state): State<AppState>,
+    Form(body): Form<ContentFormBody>,
+) -> Response {
+    if !constant_time_eq(body.admin_secret.as_bytes(), state.config.admin_secret.as_bytes()) {
+        return (StatusCode::FORBIDDEN, "Forbidden").into_response();
+    }
+
+    let body_texts = [
+        body.body_text_1,
+        body.body_text_2,
+        body.body_text_3,
+        body.body_text_4,
+    ];
+    let image_filenames = [
+        body.image_filename_1,
+        body.image_filename_2,
+        body.image_filename_3,
+        body.image_filename_4,
+    ];
+
+    for i in 0..4usize {
+        let tab_number = (i + 1) as i16;
+
+        let body_text = body_texts[i]
+            .as_deref()
+            .map(|s| s.trim())
+            .filter(|s| !s.is_empty())
+            .map(|s| s.to_string());
+
+        if let Some(ref text) = body_text {
+            if text.len() > 10_000 {
+                let err_html = form_error_page(&format!(
+                    "Tab {}: body text exceeds 10 000 characters.",
+                    tab_number
+                ));
+                return Html(err_html).into_response();
+            }
+        }
+
+        let image_filename = match image_filenames[i].as_deref().map(|s| s.trim()).filter(|s| !s.is_empty()) {
+            Some(name) => {
+                if !is_valid_image_filename(name) {
+                    let err_html = form_error_page(&format!(
+                        "Tab {}: invalid image filename \"{}\".",
+                        tab_number, name
+                    ));
+                    return Html(err_html).into_response();
+                }
+                let path = format!("{}/{}", state.config.restricted_images_dir, name);
+                if tokio::fs::metadata(&path).await.is_err() {
+                    let err_html = form_error_page(&format!(
+                        "Tab {}: file \"{}\" not found in images directory.",
+                        tab_number, name
+                    ));
+                    return Html(err_html).into_response();
+                }
+                Some(name.to_string())
+            }
+            None => None,
+        };
+
+        if let Err(e) = sqlx::query(
+            "INSERT INTO tab_content (tab_number, body_text, image_filename, updated_at)
+             VALUES ($1, $2, $3, now())
+             ON CONFLICT (tab_number) DO UPDATE
+             SET body_text = EXCLUDED.body_text,
+                 image_filename = EXCLUDED.image_filename,
+                 updated_at = now()",
+        )
+        .bind(tab_number)
+        .bind(&body_text)
+        .bind(&image_filename)
+        .execute(&state.pool)
+        .await
+        {
+            tracing::error!("Failed to upsert tab_content for tab {}: {}", tab_number, e);
+            return (StatusCode::INTERNAL_SERVER_ERROR, "Internal server error").into_response();
+        }
+    }
+
+    Redirect::to("/admin/content?saved=1").into_response()
+}
+
+fn form_error_page(message: &str) -> String {
+    format!(
+        r#"<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Admin — Error</title>
+  <style>
+    body {{ background: #0d0d0d; color: #c8ffc8; font-family: monospace; padding: 2rem; }}
+    .banner {{ background: #3a1a1a; border: 1px solid #6e2e2e; color: #ff8080; padding: 0.6rem 1rem; border-radius: 3px; margin-bottom: 1rem; max-width: 780px; }}
+    a {{ color: #80ff80; }}
+  </style>
+</head>
+<body>
+  <p class="banner">{}</p>
+  <p><a href="/admin/content">← Back to editor</a></p>
+</body>
+</html>"#,
+        crate::restricted::handlers::html_escape(message)
+    )
 }

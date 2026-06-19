@@ -27,3 +27,4 @@ uuid = { version = "1", features = ["v4", "serde"] }
 tower = { version = "0.4", features = ["util"] }
 tower-http = { version = "0.5", features = ["fs", "trace"] }
 chrono = { version = "0.4", features = ["serde"] }
+comrak = { version = "0.29", default-features = false }

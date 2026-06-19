@@ -67,6 +67,7 @@ async fn main() {
         .route("/admin/revoke", post(admin::handlers::revoke))
         .route("/admin/reset", post(admin::handlers::reset))
         .route("/admin/content/:tab_number", put(admin::handlers::put_tab_content))
+        .route("/admin/content", get(admin::handlers::content_form).post(admin::handlers::save_content_form))
         .layer(TraceLayer::new_for_http())
         .with_state(state);
 
