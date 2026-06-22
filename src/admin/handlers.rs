@@ -96,19 +96,6 @@ fn admin_login_page_html(error_banner: &str) -> String {
     )
 }
 
-fn url_encode(s: &str) -> String {
-    let mut out = String::with_capacity(s.len());
-    for byte in s.bytes() {
-        match byte {
-            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => {
-                out.push(byte as char);
-            }
-            _ => out.push_str(&format!("%{:02X}", byte)),
-        }
-    }
-    out
-}
-
 // ── Legacy API auth (unchanged) ───────────────────────────────────────────────
 
 fn check_admin_auth(headers: &HeaderMap, config: &crate::config::Config) -> bool {
@@ -743,18 +730,12 @@ async fn credentials_page_body(state: &AppState, banner_html: &str) -> String {
   <thead><tr><th>Username</th><th>Uses remaining</th></tr></thead>
   <tbody>{table_rows}</tbody>
 </table>
-<h2>Create credential</h2>
+<h2>Generate new credential</h2>
 <div class="form-section">
   <form method="post" action="/admin/credentials">
-    <label for="cred_username">Username</label>
-    <input id="cred_username" name="username" type="text" required autocomplete="off">
-    <label for="cred_password">Password</label>
-    <input id="cred_password" name="password" type="text" required autocomplete="off">
-    <label for="cred_max_uses">Max uses</label>
-    <input id="cred_max_uses" name="max_uses" type="number" min="1" value="3" required>
     <label for="cred_secret">Secret key</label>
     <input id="cred_secret" name="secret_key" type="password" required autocomplete="current-password">
-    <button type="submit">Create</button>
+    <button type="submit">Generate</button>
   </form>
 </div>"#,
         banner = banner_html,
@@ -762,32 +743,16 @@ async fn credentials_page_body(state: &AppState, banner_html: &str) -> String {
     )
 }
 
-#[derive(Deserialize)]
-pub struct CredentialsQuery {
-    pub created: Option<String>,
-}
-
 pub async fn admin_credentials_get(
     State(state): State<AppState>,
     _session: AdminSession,
-    Query(params): Query<CredentialsQuery>,
 ) -> Response {
-    let banner = match params.created.as_deref().filter(|s| !s.is_empty()) {
-        Some(username) => format!(
-            r#"<p class="banner ok">Credential '{}' created.</p>"#,
-            html_escape(username)
-        ),
-        None => String::new(),
-    };
-    let body = credentials_page_body(&state, &banner).await;
+    let body = credentials_page_body(&state, "").await;
     Html(admin_page_html("Credentials", &body)).into_response()
 }
 
 #[derive(Deserialize)]
 pub struct NewCredentialForm {
-    pub username: String,
-    pub password: String,
-    pub max_uses: String,
     pub secret_key: String,
 }
 
@@ -801,30 +766,8 @@ pub async fn admin_credentials_post(
         return Html(admin_page_html("Credentials", &body)).into_response();
     }
 
-    let username = form.username.trim().to_string();
-    if username.is_empty() {
-        let body = credentials_page_body(&state, r#"<p class="banner err">Username is required.</p>"#).await;
-        return Html(admin_page_html("Credentials", &body)).into_response();
-    }
-
-    if form.password.is_empty() {
-        let body = credentials_page_body(&state, r#"<p class="banner err">Password is required.</p>"#).await;
-        return Html(admin_page_html("Credentials", &body)).into_response();
-    }
-
-    let max_uses: i32 = match form.max_uses.trim().parse() {
-        Ok(n) if n >= 1 => n,
-        _ => {
-            let body = credentials_page_body(
-                &state,
-                r#"<p class="banner err">Max uses must be a positive integer.</p>"#,
-            )
-            .await;
-            return Html(admin_page_html("Credentials", &body)).into_response();
-        }
-    };
-
-    let password_hash = match hash_password(&form.password) {
+    let password = generate_password();
+    let password_hash = match hash_password(&password) {
         Ok(h) => h,
         Err(e) => {
             tracing::error!("Failed to hash password: {}", e);
@@ -832,29 +775,44 @@ pub async fn admin_credentials_post(
         }
     };
 
-    let result = sqlx::query(
-        "INSERT INTO users (username, password_hash, max_uses) VALUES ($1, $2, $3)",
-    )
-    .bind(&username)
-    .bind(&password_hash)
-    .bind(max_uses)
-    .execute(&state.pool)
-    .await;
+    for attempt in 0..10 {
+        let username = generate_username();
 
-    match result {
-        Ok(_) => Redirect::to(&format!("/admin/credentials?created={}", url_encode(&username)))
-            .into_response(),
-        Err(e) if e.as_database_error().map_or(false, |d| d.is_unique_violation()) => {
-            let msg = format!(
-                r#"<p class="banner err">Username '{}' already exists.</p>"#,
-                html_escape(&username)
-            );
-            let body = credentials_page_body(&state, &msg).await;
-            Html(admin_page_html("Credentials", &body)).into_response()
-        }
-        Err(e) => {
-            tracing::error!("Failed to insert credential: {}", e);
-            (StatusCode::INTERNAL_SERVER_ERROR, "Internal server error").into_response()
+        let result = sqlx::query(
+            "INSERT INTO users (username, password_hash) VALUES ($1, $2) ON CONFLICT DO NOTHING RETURNING username",
+        )
+        .bind(&username)
+        .bind(&password_hash)
+        .fetch_optional(&state.pool)
+        .await;
+
+        match result {
+            Ok(Some(_)) => {
+                let confirmation_html = format!(
+                    r#"<h1>New credential generated</h1>
+<p class="banner err">Copy these credentials now. The password cannot be recovered after leaving this page.</p>
+<table>
+  <tr><th>Username</th><td><code>{username}</code></td></tr>
+  <tr><th>Password</th><td><code>{password}</code></td></tr>
+  <tr><th>Max uses</th><td>3</td></tr>
+</table>
+<p><a href="/admin/credentials">← Back to credentials</a></p>"#,
+                    username = html_escape(&username),
+                    password = html_escape(&password),
+                );
+                return Html(admin_page_html("New Credential", &confirmation_html)).into_response();
+            }
+            Ok(None) => {
+                tracing::warn!("Username collision on attempt {}: {}", attempt + 1, username);
+                continue;
+            }
+            Err(e) => {
+                tracing::error!("Failed to insert credential: {}", e);
+                return (StatusCode::INTERNAL_SERVER_ERROR, "Internal server error").into_response();
+            }
         }
     }
+
+    (StatusCode::INTERNAL_SERVER_ERROR, "Failed to generate unique username after 10 attempts")
+        .into_response()
 }
