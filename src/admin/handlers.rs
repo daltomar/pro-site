@@ -662,9 +662,11 @@ pub async fn admin_login_post(
         return (StatusCode::INTERNAL_SERVER_ERROR, "Internal server error").into_response();
     }
 
+    // No Max-Age: session cookie, discarded when the browser window closes.
+    // Server-side expiry (expires_at in DB) still enforces the time limit.
     let cookie = format!(
-        "admin_session={}; HttpOnly; Secure; SameSite=Strict; Path=/; Max-Age={}",
-        raw_token, state.config.admin_session_duration_secs
+        "admin_session={}; HttpOnly; Secure; SameSite=Strict; Path=/",
+        raw_token
     );
 
     let mut response = Redirect::to("/admin/content").into_response();
