@@ -74,6 +74,7 @@ async fn main() {
         .route("/admin/content/:tab_number", put(admin::handlers::put_tab_content))
         .route("/admin/content", get(admin::handlers::content_form).post(admin::handlers::save_content_form))
         .route("/admin/credentials", get(admin::handlers::admin_credentials_get).post(admin::handlers::admin_credentials_post))
+        .route("/admin/credentials/delete", post(admin::handlers::admin_delete_credential))
         // Legacy API routes (header-based auth, unchanged)
         .route("/admin/issue", post(admin::handlers::issue))
         .route("/admin/users", get(admin::handlers::list_users))

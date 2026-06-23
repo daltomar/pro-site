@@ -44,6 +44,8 @@ const ADMIN_STYLE: &str = r#"
     th { color: #7aad7a; font-weight: normal; }
     .dimmed { opacity: 0.45; }
     .login-card { max-width: 380px; margin: 4rem auto 0; }
+    .btn-delete { background: #3a1a1a; color: #ff8080; border: 1px solid #6e2e2e; padding: 0.25rem 0.6rem; font-family: monospace; font-size: 0.85rem; cursor: pointer; border-radius: 3px; margin-top: 0; }
+    .btn-delete:hover { background: #5a2a2a; }
 "#;
 
 fn admin_page_html(title: &str, body: &str) -> String {
@@ -716,10 +718,19 @@ async fn credentials_page_body(state: &AppState, banner_html: &str) -> String {
         let max_uses: i32 = row.get("max_uses");
         let remaining = (max_uses - use_count).max(0);
         let dim = if remaining == 0 { r#" class="dimmed""# } else { "" };
+        let user_esc = html_escape(&username);
         table_rows.push_str(&format!(
-            "<tr{dim}><td>{user}</td><td>{remaining}</td></tr>",
+            r#"<tr{dim}>
+  <td>{user}</td>
+  <td>{remaining}</td>
+  <td><form method="post" action="/admin/credentials/delete" onsubmit="return confirm('Delete {user_confirm}?')">
+    <input type="hidden" name="username" value="{user}">
+    <button type="submit" class="btn-delete">Delete</button>
+  </form></td>
+</tr>"#,
             dim = dim,
-            user = html_escape(&username),
+            user = user_esc,
+            user_confirm = user_esc,
             remaining = remaining,
         ));
     }
@@ -729,7 +740,7 @@ async fn credentials_page_body(state: &AppState, banner_html: &str) -> String {
 {banner}
 <h2>Existing credentials</h2>
 <table>
-  <thead><tr><th>Username</th><th>Uses remaining</th></tr></thead>
+  <thead><tr><th>Username</th><th>Uses remaining</th><th></th></tr></thead>
   <tbody>{table_rows}</tbody>
 </table>
 <h2>Generate new credential</h2>
@@ -817,4 +828,29 @@ pub async fn admin_credentials_post(
 
     (StatusCode::INTERNAL_SERVER_ERROR, "Failed to generate unique username after 10 attempts")
         .into_response()
+}
+
+// ── Delete credential ─────────────────────────────────────────────────────────
+
+#[derive(Deserialize)]
+pub struct DeleteCredentialForm {
+    pub username: String,
+}
+
+pub async fn admin_delete_credential(
+    State(state): State<AppState>,
+    _session: AdminSession,
+    Form(form): Form<DeleteCredentialForm>,
+) -> Response {
+    match sqlx::query("DELETE FROM users WHERE username = $1")
+        .bind(&form.username)
+        .execute(&state.pool)
+        .await
+    {
+        Ok(_) => Redirect::to("/admin/credentials").into_response(),
+        Err(e) => {
+            tracing::error!("Failed to delete user {}: {}", form.username, e);
+            (StatusCode::INTERNAL_SERVER_ERROR, "Internal server error").into_response()
+        }
+    }
 }
