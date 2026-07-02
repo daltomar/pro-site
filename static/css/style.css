@@ -221,6 +221,11 @@ p.error {
   display: block;
 }
 
+.tab-panel img {
+  display: block;
+  margin-top: 3rem;
+}
+
 /* ── Access banner ───────────────────────────────────────── */
 
 .access-banner {
