@@ -62,16 +62,16 @@ async fn serve_restricted_html(file_path: &str, user: &AuthUser, state: &AppStat
     };
 
     let tab_rows = sqlx::query(
-        "SELECT tab_number, body_text, image_filename FROM tab_content WHERE tab_number BETWEEN 1 AND 4",
+        "SELECT tab_number, body_text, image_filename FROM tab_content WHERE tab_number BETWEEN 1 AND 3",
     )
     .fetch_all(&state.pool)
     .await
     .unwrap_or_default();
 
-    let mut tab_content: [Option<(Option<String>, Option<String>)>; 4] = [None, None, None, None];
+    let mut tab_content: [Option<(Option<String>, Option<String>)>; 3] = [None, None, None];
     for row in &tab_rows {
         let n: i16 = row.get("tab_number");
-        if (1..=4).contains(&n) {
+        if (1..=3).contains(&n) {
             let body: Option<String> = row.get("body_text");
             let img: Option<String> = row.get("image_filename");
             tab_content[(n - 1) as usize] = Some((body, img));
@@ -79,7 +79,7 @@ async fn serve_restricted_html(file_path: &str, user: &AuthUser, state: &AppStat
     }
 
     let mut html = content;
-    for i in 0..4 {
+    for i in 0..3 {
         let marker = format!("<!-- TAB{}_CONTENT -->", i + 1);
         let rendered = render_tab_content(tab_content[i].as_ref());
         html = html.replace(&marker, &rendered);

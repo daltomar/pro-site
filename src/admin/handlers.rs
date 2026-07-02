@@ -309,8 +309,8 @@ pub async fn put_tab_content(
         return forbidden();
     }
 
-    if !(1..=4).contains(&tab_number) {
-        return (StatusCode::BAD_REQUEST, "tab_number must be between 1 and 4").into_response();
+    if !(1..=3).contains(&tab_number) {
+        return (StatusCode::BAD_REQUEST, "tab_number must be between 1 and 3").into_response();
     }
 
     let body_text = body.body_text.and_then(|s| {
@@ -394,16 +394,16 @@ pub async fn content_form(
     Query(params): Query<SavedQuery>,
 ) -> Response {
     let rows = sqlx::query(
-        "SELECT tab_number, body_text, image_filename FROM tab_content WHERE tab_number BETWEEN 1 AND 4",
+        "SELECT tab_number, body_text, image_filename FROM tab_content WHERE tab_number BETWEEN 1 AND 3",
     )
     .fetch_all(&state.pool)
     .await
     .unwrap_or_default();
 
-    let mut tabs: [(String, String); 4] = Default::default();
+    let mut tabs: [(String, String); 3] = Default::default();
     for row in &rows {
         let n: i16 = row.get("tab_number");
-        if (1..=4).contains(&n) {
+        if (1..=3).contains(&n) {
             let body: String = row.get::<Option<String>, _>("body_text").unwrap_or_default();
             let img: String = row.get::<Option<String>, _>("image_filename").unwrap_or_default();
             tabs[(n - 1) as usize] = (body, img);
@@ -417,7 +417,7 @@ pub async fn content_form(
     };
 
     let mut tab_sections = String::new();
-    for i in 0..4usize {
+    for i in 0..3usize {
         let n = i + 1;
         let (ref body, ref img) = tabs[i];
         tab_sections.push_str(&format!(
@@ -457,11 +457,9 @@ pub struct ContentFormBody {
     pub body_text_1: Option<String>,
     pub body_text_2: Option<String>,
     pub body_text_3: Option<String>,
-    pub body_text_4: Option<String>,
     pub image_filename_1: Option<String>,
     pub image_filename_2: Option<String>,
     pub image_filename_3: Option<String>,
-    pub image_filename_4: Option<String>,
 }
 
 pub async fn save_content_form(
@@ -481,16 +479,14 @@ pub async fn save_content_form(
         body.body_text_1,
         body.body_text_2,
         body.body_text_3,
-        body.body_text_4,
     ];
     let image_filenames = [
         body.image_filename_1,
         body.image_filename_2,
         body.image_filename_3,
-        body.image_filename_4,
     ];
 
-    for i in 0..4usize {
+    for i in 0..3usize {
         let tab_number = (i + 1) as i16;
 
         let body_text = body_texts[i]
